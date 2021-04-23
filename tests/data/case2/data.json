@@ -1,0 +1,10 @@
+{
+	"year": 2000,
+	"year_str": "two thousand",
+	"package_name": "manus",
+	"places": {
+		"NO": "Norway",
+		"SE": "Sweden"
+	},
+	"pi": 3.141592653589793
+}
