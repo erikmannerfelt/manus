@@ -1,18 +1,17 @@
-use std::path::PathBuf;
 use std::fs::File;
 use std::io::prelude::*;
+use std::path::Path;
 /// Read a tex file as a vector of Strings
 ///
 /// # Arguments
 /// - `filepath`: A relative or absolute filepath.
 ///
 /// # Errors
-/// Fails if the file was not found or 
-pub fn read_tex(filepath: &PathBuf) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-
+/// Fails if the file was not found or
+pub fn read_tex(filepath: &Path) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     // Check that the file exists.
     if !filepath.is_file() {
-        return Err(format!("File not found: {}", filepath.to_str().unwrap()).into())
+        return Err(format!("File not found: {}", filepath.to_str().unwrap()).into());
     };
 
     // Open the file.
@@ -30,8 +29,7 @@ pub fn read_tex(filepath: &PathBuf) -> Result<Vec<String>, Box<dyn std::error::E
 }
 
 /// Read a json data file into an arbitrary JSON dictionary.
-pub fn read_data(filepath: &PathBuf) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-
+pub fn read_data(filepath: &Path) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
     let file = File::open(filepath)?;
     let reader = std::io::BufReader::new(file);
 

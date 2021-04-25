@@ -1,24 +1,19 @@
-use std::path::PathBuf;
-use std::fs::File;
 use clap::{App, Arg};
+use std::fs::File;
 use std::io::Write;
+use std::path::{Path, PathBuf};
 
-
-mod templates;
 mod io;
-
+mod templates;
 
 fn main() -> std::io::Result<()> {
-
-
     match parse_cli_args() {
         Ok(x) => std::io::stdout().write_all(x.as_bytes())?,
-        Err(x) => std::io::stderr().write_all(x.as_bytes())?
+        Err(x) => std::io::stderr().write_all(x.as_bytes())?,
     };
 
     Ok(())
 }
-
 
 ///Handle the CLI arguments.
 ///
@@ -32,70 +27,73 @@ fn parse_cli_args() -> Result<String, String> {
         .author("Erik Mannerfelt")
         .about("Handle tex manuscripts.")
         // Create the 'build' subcommand for building pdfs.
-        .subcommand(App::new("build")
-            .about("Render the manuscript")
-            .arg(Arg::new("INPUT")
-                .about("The input root tex file.")
-                .required(true)
-                .index(1)
-            )
-            .arg(Arg::new("OUTPUT")
-                .about("The output pdf path. Defaults to the current directory.")
-                .required(false)
-                .index(2)
-            )
-            .arg(Arg::new("DATA")
-                .about("Data file")
-                .short('d')
-                .long("data")
-            )
+        .subcommand(
+            App::new("build")
+                .about("Render the manuscript")
+                .arg(
+                    Arg::new("INPUT")
+                        .about("The input root tex file.")
+                        .required(true)
+                        .index(1),
+                )
+                .arg(
+                    Arg::new("OUTPUT")
+                        .about("The output pdf path. Defaults to the current directory.")
+                        .required(false)
+                        .index(2),
+                )
+                .arg(Arg::new("DATA").about("Data file").short('d').long("data")),
         )
-        .subcommand(App::new("convert")
-            .about("Convert to different formats.")
-            .arg(Arg::new("INPUT")
-                .about("The input root tex file")
-                .required(true)
-                .index(1)
-            )
-            .arg(Arg::new("DATA")
-                .about("Data file")
-                .short('d')
-                .long("data")
-                .takes_value(true)
-            )
-            .arg(Arg::new("FORMAT")
-                .about("Format. Choices: [tex]. Defaults to tex.")
-                .short('f')
-                .long("format")
-            )
+        .subcommand(
+            App::new("convert")
+                .about("Convert to different formats.")
+                .arg(
+                    Arg::new("INPUT")
+                        .about("The input root tex file")
+                        .required(true)
+                        .index(1),
+                )
+                .arg(
+                    Arg::new("DATA")
+                        .about("Data file")
+                        .short('d')
+                        .long("data")
+                        .takes_value(true),
+                )
+                .arg(
+                    Arg::new("FORMAT")
+                        .about("Format. Choices: [tex]. Defaults to tex.")
+                        .short('f')
+                        .long("format"),
+                ),
         )
-        .subcommand(App::new("merge")
-            .about("Merge 'input' clauses.")
-            .arg(Arg::new("INPUT")
-                .about("The input root tex file.")
-                .required(true)
-                .index(1)
-            )
+        .subcommand(
+            App::new("merge").about("Merge 'input' clauses.").arg(
+                Arg::new("INPUT")
+                    .about("The input root tex file.")
+                    .required(true)
+                    .index(1),
+            ),
         )
         .get_matches();
 
-
     // 'build' subcommand parser.
     if let Some(ref matches) = matches.subcommand_matches("build") {
-        
         // Parse the filepath.
-        let path_str = matches.value_of("INPUT").expect("It's a required argument so this shouldn't fail.");
+        let path_str = matches
+            .value_of("INPUT")
+            .expect("It's a required argument so this shouldn't fail.");
 
         // Check that the file exists and return a valid PathBuf.
         let filepath = match parse_filepath(&path_str, Some("tex")) {
             Ok(fp) => fp,
-            Err(e) => return Err(format!("{:?}", e))
+            Err(e) => return Err(format!("{:?}", e)),
         };
 
         // Read and merge all tex files.
         let lines = match merge_tex(&filepath) {
             Ok(l) => l,
-            Err(e) => return Err(format!("{:?}", e))
+            Err(e) => return Err(format!("{:?}", e)),
         };
         // Render the PDF
         let pdf_data: Vec<u8> = tectonic::latex_to_pdf(lines.join("\n")).expect("oops");
@@ -113,70 +111,68 @@ fn parse_cli_args() -> Result<String, String> {
         // Create a new file and write the PDF data to it.
         let mut file = File::create(&pdf_filepath).expect("");
         file.write_all(&pdf_data).expect("");
-
     }
 
     // 'convert' subcommand parser
     if let Some(ref matches) = matches.subcommand_matches("convert") {
-
         // Parse the input.
-        let path_str = matches.value_of("INPUT").expect("It's a reqired argument so this won't fail.");
-        
+        let path_str = matches
+            .value_of("INPUT")
+            .expect("It's a reqired argument so this won't fail.");
+
         // Check that the file exists and return a valid PathBuf.
         let filepath = match parse_filepath(&path_str, Some("tex")) {
             Ok(fp) => fp,
-            Err(e) => return Err(format!("{:?}", e))
+            Err(e) => return Err(format!("{:?}", e)),
         };
 
         // Write the result to stdout if it worked or the error to stderr if it didn't.
         let mut lines = match merge_tex(&filepath) {
             Ok(lines) => lines,
-            Err(message) => return Err(format!("{:?}", message))
+            Err(message) => return Err(format!("{:?}", message)),
         };
 
         // Parse the data argument and do template filling in case it was given.
         if let Some(data_path_str) = matches.value_of("DATA") {
-
             let data_path = match parse_filepath(&data_path_str, Some("json")) {
                 Ok(fp) => fp,
-                Err(e) => return Err(format!("{:?}", e))
+                Err(e) => return Err(format!("{:?}", e)),
             };
 
             let data = match io::read_data(&data_path) {
                 Ok(d) => d,
-                Err(e) => return Err(format!("{:?}", e))
+                Err(e) => return Err(format!("{:?}", e)),
             };
 
             lines = templates::fill_data(&lines, &data);
         }
 
         // Return the text to write to stdout.
-        return Ok(lines.join("\n"))
-
+        return Ok(lines.join("\n"));
     }
 
     // 'merge' subcommand parser.
     if let Some(ref matches) = matches.subcommand_matches("merge") {
-
         // Parse the input path..
-        let path_str = matches.value_of("INPUT").expect("It's a reqired argument so this won't fail.");
-        
+        let path_str = matches
+            .value_of("INPUT")
+            .expect("It's a reqired argument so this won't fail.");
+
         // Check that the file exists and return a valid PathBuf.
         let filepath = match parse_filepath(&path_str, Some("tex")) {
             Ok(fp) => fp,
-            Err(e) => return Err(format!("{:?}", e))
+            Err(e) => return Err(format!("{:?}", e)),
         };
 
         // Write the result to stdout if it worked or the error to stderr if it didn't.
         match merge_tex(&filepath) {
             Ok(lines) => return Ok(lines.join("\n")),
-            Err(message) => return Err(format!("{:?}", message))
+            Err(message) => return Err(format!("{:?}", message)),
         };
     }
 
     // If no return statements were reached. Write an empty string to stderr.
     Err("".into())
-
 }
 
 /// Try to parse and return a filepath.
@@ -190,8 +186,10 @@ fn parse_cli_args() -> Result<String, String> {
 ///
 /// # Returns
 /// A filepath, if a file with its name exists and it has the correct extension.
-fn parse_filepath(filepath_str: &str, expected_extension: Option<&str>) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    
+fn parse_filepath(
+    filepath_str: &str,
+    expected_extension: Option<&str>,
+) -> Result<PathBuf, Box<dyn std::error::Error>> {
     // Create a PathBuf from the input string.
     let mut path = PathBuf::from(filepath_str);
 
@@ -202,11 +200,15 @@ fn parse_filepath(filepath_str: &str, expected_extension: Option<&str>) -> Resul
         match path.extension() {
             Some(ext2) => {
                 if ext2 != ext {
-                    return Err(format!("Incorrect extension: {:?}. Expected: {}", ext2, ext).into());
-                }},
-            None => {path.set_extension(ext);}
+                    return Err(
+                        format!("Incorrect extension: {:?}. Expected: {}", ext2, ext).into(),
+                    );
+                }
+            }
+            None => {
+                path.set_extension(ext);
+            }
         }
-
     }
     // Check that the file exists.
     if !path.is_file() {
@@ -215,15 +217,11 @@ fn parse_filepath(filepath_str: &str, expected_extension: Option<&str>) -> Resul
     Ok(path)
 }
 
-
-
-
 /// Read a tex file and recursively merge all \\input{} statements.
 ///
 /// # Arguments
 /// * `filepath`: A relative or absolute path to the main.tex.
-fn merge_tex(filepath: &PathBuf) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-
+fn merge_tex(filepath: &Path) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     // Create the output line vector
     let mut lines: Vec<String> = Vec::new();
 
@@ -235,7 +233,7 @@ fn merge_tex(filepath: &PathBuf) -> Result<Vec<String>, Box<dyn std::error::Erro
         // If it doesn't contain and input, just continue.
         if !line.contains(r"\input{") {
             lines.push(line);
-            continue
+            continue;
         }
         let mut input_path = PathBuf::from(line.replace(r"\input{", "").replace("}", ""));
 
@@ -256,18 +254,13 @@ fn merge_tex(filepath: &PathBuf) -> Result<Vec<String>, Box<dyn std::error::Erro
     Ok(lines)
 }
 
-
-
-
 #[cfg(test)]
 mod tests {
 
     use super::*;
 
-
     #[test]
     fn test_parse_filepath() {
-
         parse_filepath("tests/data/case1/main.tex", Some("tex")).expect("This should exist");
 
         parse_filepath("tests/data/case1/main.tex", Some("text")).expect_err("This should fail");
@@ -275,19 +268,14 @@ mod tests {
         parse_filepath("tests/data/case1/main", Some("tex")).expect("This should pass");
 
         parse_filepath("Cargo.toml", Some("toml")).expect("This should pass");
-
-
     }
 
     #[test]
     fn test_merge_tex() {
-
         let testpath = PathBuf::from("tests/data/case1/main.tex");
 
         let lines = merge_tex(&testpath).unwrap();
 
         assert_eq!(lines.len(), 13);
     }
-
-
 }
