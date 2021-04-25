@@ -9,7 +9,6 @@ handlebars_helper!(round_3: |v: f64| format!("{:.3}", v));
 
 /// Fill a vector of text with data using templating.
 pub fn fill_data(lines: &Vec<String>, data: &serde_json::Value) -> Vec<String> {
-
     let mut new_lines: Vec<String> = Vec::new();
 
     let mut reg = handlebars::Handlebars::new();
@@ -25,13 +24,18 @@ pub fn fill_data(lines: &Vec<String>, data: &serde_json::Value) -> Vec<String> {
         match reg.render_template(line, data) {
             Ok(l) => new_lines.push(l),
             Err(e) => {
-                let err = format!("WARNING: {}\n", e.as_render_error().unwrap().desc.replace(" in strict mode", ""));
+                let err = format!(
+                    "WARNING: {}\n",
+                    e.as_render_error()
+                        .unwrap()
+                        .desc
+                        .replace(" in strict mode", "")
+                );
                 std::io::stderr().write_all(err.as_bytes()).unwrap();
                 new_lines.push(line.to_owned())
             }
-                
         };
-        
+
         /*
         new_lines.push(reg.render_template(line, data).expect("Templating failed"));
             Err(ref e) if e.kind() == handlebars::RenderError => {
@@ -39,7 +43,6 @@ pub fn fill_data(lines: &Vec<String>, data: &serde_json::Value) -> Vec<String> {
                 io::stderr().write_all(e.as_render_error().unwrap().desc.as_bytes());
             }
         */
-
     }
 
     new_lines
@@ -53,12 +56,13 @@ mod tests {
 
     #[test]
     fn test_fill_data() {
-
-        let lines: Vec<String> = vec!["Hello".into(), "I am {{years}} years old.".into(), "Goodbye.".into()];
-
+        let lines: Vec<String> = vec![
+            "Hello".into(),
+            "I am {{years}} years old.".into(),
+            "Goodbye.".into(),
+        ];
 
         let data = serde_json::json!({"years": 24});
-
 
         let new_lines = fill_data(&lines, &data);
 
@@ -67,7 +71,6 @@ mod tests {
 
     #[test]
     fn test_read_data() {
-
         let path = PathBuf::from("tests/data/case2/data.json");
 
         let data = crate::io::read_data(&path).unwrap();
@@ -75,7 +78,10 @@ mod tests {
         assert_eq!(data.get("year").unwrap(), 2000);
         assert_eq!(data.get("year_str").unwrap(), "two thousand");
 
-        let lines: Vec<String> = vec!["The year was once {{year}}".into(), "This package is called {{package_name}}.".into()];
+        let lines: Vec<String> = vec![
+            "The year was once {{year}}".into(),
+            "This package is called {{package_name}}.".into(),
+        ];
 
         let new_lines = fill_data(&lines, &data);
 
