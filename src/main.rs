@@ -1,7 +1,7 @@
 use clap::{App, Arg};
 use std::fs::File;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 mod io;
 mod templates;
@@ -221,7 +221,7 @@ fn parse_filepath(
 ///
 /// # Arguments
 /// * `filepath`: A relative or absolute path to the main.tex.
-fn merge_tex(filepath: &PathBuf) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+fn merge_tex(filepath: &Path) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     // Create the output line vector
     let mut lines: Vec<String> = Vec::new();
 

@@ -8,7 +8,7 @@ handlebars_helper!(round_2: |v: f64| format!("{:.2}", v));
 handlebars_helper!(round_3: |v: f64| format!("{:.3}", v));
 
 /// Fill a vector of text with data using templating.
-pub fn fill_data(lines: &Vec<String>, data: &serde_json::Value) -> Vec<String> {
+pub fn fill_data(lines: &[String], data: &serde_json::Value) -> Vec<String> {
     let mut new_lines: Vec<String> = Vec::new();
 
     let mut reg = handlebars::Handlebars::new();
