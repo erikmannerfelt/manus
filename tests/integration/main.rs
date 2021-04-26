@@ -36,4 +36,17 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_verbosity() -> Result<(), Box<dyn std::error::Error>> {
+        let mut cmd = Command::cargo_bin("manus")?;
+
+        cmd.arg("-vvv");
+
+        cmd.assert()
+            .failure()
+            .stderr(predicate::str::contains("Invalid verbosity level"));
+
+        Ok(())
+    }
 }
