@@ -1,4 +1,4 @@
-use handlebars::{self,handlebars_helper};
+use handlebars::{self, handlebars_helper};
 use serde_json::Value as Json;
 use std::io::Write;
 
@@ -18,29 +18,43 @@ handlebars_helper!(lower: |s:str| s.to_lowercase());
 ///
 /// Note that the "separator" key needs to exist in the data file.
 ///
-fn sep_helper(h: &handlebars::Helper, _: &handlebars::Handlebars, context: &handlebars::Context, _: &mut handlebars::RenderContext, out: &mut dyn handlebars::Output) -> handlebars::HelperResult {
-
+fn sep_helper(
+    h: &handlebars::Helper,
+    _: &handlebars::Handlebars,
+    context: &handlebars::Context,
+    _: &mut handlebars::RenderContext,
+    out: &mut dyn handlebars::Output,
+) -> handlebars::HelperResult {
     // Check that only argument was provided.
     if h.param(1).is_some() {
-        return Err(handlebars::RenderError::new::<String>("pm only takes two arguments. More were given.".into()));
+        return Err(handlebars::RenderError::new::<String>(
+            "pm only takes two arguments. More were given.".into(),
+        ));
     };
 
     let data = context.data();
 
     let separator = match data.get("separator") {
         Some(v) => v.as_str().unwrap(),
-        None => return Err(handlebars::RenderError::new::<String>("Could not find the \"separator\" key in the data file. Please add it.".into()))
+        None => {
+            return Err(handlebars::RenderError::new::<String>(
+                "Could not find the \"separator\" key in the data file. Please add it.".into(),
+            ))
+        }
     };
-
 
     println!("{}", separator);
 
     let value = match h.param(0) {
         Some(p) => match p.value().as_str() {
             Some(s) => s.to_owned(),
-            None => p.value().to_string()
+            None => p.value().to_string(),
         },
-        None => return Err(handlebars::RenderError::new::<String>("Could not read the second argument..".into()))
+        None => {
+            return Err(handlebars::RenderError::new::<String>(
+                "Could not read the second argument..".into(),
+            ))
+        }
     };
 
     let mut new_value = String::new();
@@ -56,11 +70,10 @@ fn sep_helper(h: &handlebars::Helper, _: &handlebars::Handlebars, context: &hand
         };
         in_digit = c.is_ascii_digit() | (in_digit & (n_periods == 1));
 
-
         if in_digit {
             number_buffer.push(c);
         } else {
-            if number_buffer.len() > 0 {
+            if !number_buffer.is_empty() {
                 let number = number_buffer.parse::<f64>().unwrap();
                 new_value += &add_separators(number, separator);
                 number_buffer.clear();
@@ -68,7 +81,7 @@ fn sep_helper(h: &handlebars::Helper, _: &handlebars::Handlebars, context: &hand
             new_value.push(c);
         };
     }
-    if number_buffer.len() > 0 {
+    if !number_buffer.is_empty() {
         let number = number_buffer.parse::<f64>().unwrap();
         new_value += &add_separators(number, separator);
     }
@@ -76,8 +89,6 @@ fn sep_helper(h: &handlebars::Helper, _: &handlebars::Handlebars, context: &hand
     out.write(&new_value)?;
 
     Ok(())
-
-
 }
 
 /// Add 1000s separators for a number
@@ -94,7 +105,6 @@ fn sep_helper(h: &handlebars::Helper, _: &handlebars::Handlebars, context: &hand
 /// # Returns
 /// A more readable string representation of the number.
 fn add_separators(number: f64, separator: &str) -> String {
-
     // Convert the number into a string.
     let number_str = format!("{}", number);
 
@@ -105,14 +115,20 @@ fn add_separators(number: f64, separator: &str) -> String {
     // It will be filled in backwards, so it will be reversed.
     let mut new_real_str_rev = String::new();
     // Loop over the real part in reverse.
-    for (i, c) in real_part_str.chars().collect::<Vec<char>>().iter().rev().enumerate() {
+    for (i, c) in real_part_str
+        .chars()
+        .collect::<Vec<char>>()
+        .iter()
+        .rev()
+        .enumerate()
+    {
         // If the numbering is divisible by 3, add a separator.
         if (i % 3 == 0) & (i > 0) {
             new_real_str_rev.push_str(separator);
         };
         // Push the digit as owned.
         new_real_str_rev.push(*c);
-    };
+    }
     // Reorder the characters to be in the right direction.
     let new_real_str: String = new_real_str_rev.chars().rev().collect::<String>();
 
@@ -135,11 +151,18 @@ fn add_separators(number: f64, separator: &str) -> String {
 ///
 /// "{{pm 1 value}}" => "`1.2$\pm$0.5`"
 ///
-fn pm_helper(h: &handlebars::Helper, _: &handlebars::Handlebars, context: &handlebars::Context, _: &mut handlebars::RenderContext, out: &mut dyn handlebars::Output) -> handlebars::HelperResult {
-
+fn pm_helper(
+    h: &handlebars::Helper,
+    _: &handlebars::Handlebars,
+    context: &handlebars::Context,
+    _: &mut handlebars::RenderContext,
+    out: &mut dyn handlebars::Output,
+) -> handlebars::HelperResult {
     // Check that only two arguments were provided.
     if h.param(2).is_some() {
-        return Err(handlebars::RenderError::new::<String>("pm only takes two arguments. More were given.".into()));
+        return Err(handlebars::RenderError::new::<String>(
+            "pm only takes two arguments. More were given.".into(),
+        ));
     };
 
     // Check if two arguments were given (if more than one, this is assumed to be true).
@@ -148,7 +171,7 @@ fn pm_helper(h: &handlebars::Helper, _: &handlebars::Handlebars, context: &handl
     // If two arguments are given, the value key is the second index, else the first.
     let key_index: usize = match two_arguments {
         true => 1,
-        false => 0
+        false => 0,
     };
 
     // Try to find the key to the value.
@@ -158,10 +181,19 @@ fn pm_helper(h: &handlebars::Helper, _: &handlebars::Handlebars, context: &handl
             // If a data path was associated, return it.
             Some(v) => v,
             // Otherwise, raise an error.
-            None => return Err(handlebars::RenderError::new::<String>(format!("pm argument: {} was not a valid data path.", attr.value().to_string())))
+            None => {
+                return Err(handlebars::RenderError::new::<String>(format!(
+                    "pm argument: {} was not a valid data path.",
+                    attr.value().to_string()
+                )))
+            }
         },
         // It only reaches here if no argument was given.
-        None => return Err(handlebars::RenderError::new::<String>("No argument was given for pm".into()))
+        None => {
+            return Err(handlebars::RenderError::new::<String>(
+                "No argument was given for pm".into(),
+            ))
+        }
     };
 
     // The last key is the value key.
@@ -173,25 +205,43 @@ fn pm_helper(h: &handlebars::Helper, _: &handlebars::Handlebars, context: &handl
     let mut parent: &Json = context.data();
     // Loop through each parent key (if any).
     for key in parent_keys {
-        parent = parent.get(key).expect("Getter failed on parent json. Shouldn't happen.");
+        parent = parent
+            .get(key)
+            .expect("Getter failed on parent json. Shouldn't happen.");
     }
 
     // Parse the value and plusminus keys as f64.
-    let mut value = match parent.get(&value_key).expect("Value not found in parent. Something is wrong.").as_f64() {
+    let mut value = match parent
+        .get(&value_key)
+        .expect("Value not found in parent. Something is wrong.")
+        .as_f64()
+    {
         Some(v) => v,
-        None => return Err(handlebars::RenderError::new::<String>(format!("Could not parse value {} as float", parent.get(&value_key).unwrap())))
+        None => {
+            return Err(handlebars::RenderError::new::<String>(format!(
+                "Could not parse value {} as float",
+                parent.get(&value_key).unwrap()
+            )))
+        }
     };
     // The plusminus key might not exist, so this has to be checked.
     let mut pm = match parent.get(&(value_key.to_owned() + "_pm")) {
-        Some(v) => {
-            match v.as_f64() {
-                Some(y) => y,
-                None => return Err(handlebars::RenderError::new::<String>(format!("Could not parse pm value {} as float", v.to_string())))
+        Some(v) => match v.as_f64() {
+            Some(y) => y,
+            None => {
+                return Err(handlebars::RenderError::new::<String>(format!(
+                    "Could not parse pm value {} as float",
+                    v.to_string()
+                )))
             }
         },
-        None => return Err(handlebars::RenderError::new::<String>(format!("{}_pm key not found", value_key)))
+        None => {
+            return Err(handlebars::RenderError::new::<String>(format!(
+                "{}_pm key not found",
+                value_key
+            )))
+        }
     };
-
 
     // If two arguments were given, the decimals variable should be used.
     if two_arguments {
@@ -202,11 +252,15 @@ fn pm_helper(h: &handlebars::Helper, _: &handlebars::Handlebars, context: &handl
                 // Try to parse the first parameter as an integer.
                 match json_as_integer(p.value()) {
                     Ok(x) => x,
-                    Err(e) => return Err(handlebars::RenderError::new::<String>(e))
+                    Err(e) => return Err(handlebars::RenderError::new::<String>(e)),
                 }
-            },
+            }
             // If it doesn't exist (which should be impossible since param 1 exists.)
-            None => return Err(handlebars::RenderError::new::<String>("Could not find the first argument.".into()))
+            None => {
+                return Err(handlebars::RenderError::new::<String>(
+                    "Could not find the first argument.".into(),
+                ))
+            }
         };
 
         // Update the value and pm variables with the rounded value.
@@ -218,17 +272,19 @@ fn pm_helper(h: &handlebars::Helper, _: &handlebars::Handlebars, context: &handl
     out.write(&format!("{}$\\pm${}", value, pm))?;
 
     Ok(())
-
 }
-
 
 /// Helper to round a value up or down.
 ///
 /// If one argument is given, it will round this to the nearest integer.
 /// If two are given, the first is parsed as the `decimals` and the second as `value`.
-fn round_helper(h: &handlebars::Helper, _: &handlebars::Handlebars, _: &handlebars::Context, _: &mut handlebars::RenderContext, out: &mut dyn handlebars::Output) -> handlebars::HelperResult {
-
-
+fn round_helper(
+    h: &handlebars::Helper,
+    _: &handlebars::Handlebars,
+    _: &handlebars::Context,
+    _: &mut handlebars::RenderContext,
+    out: &mut dyn handlebars::Output,
+) -> handlebars::HelperResult {
     // Establish the decimals and value arguments which will soon be assigned.
     let decimals: i32;
     let value: f64;
@@ -243,22 +299,25 @@ fn round_helper(h: &handlebars::Helper, _: &handlebars::Handlebars, _: &handleba
                 // Try to parse the first parameter as an integer.
                 match json_as_integer(p.value()) {
                     Ok(x) => x,
-                    Err(e) => return Err(handlebars::RenderError::new::<String>(e))
+                    Err(e) => return Err(handlebars::RenderError::new::<String>(e)),
                 }
-            },
+            }
             // If it doesn't exist (which should be impossible since param 1 exists.)
-            None => return Err(handlebars::RenderError::new::<String>("Could not find the first argument.".into()))
+            None => {
+                return Err(handlebars::RenderError::new::<String>(
+                    "Could not find the first argument.".into(),
+                ))
+            }
         };
 
-        // Read param 1 as the value (we already know that 1 exists, so just unwrap it). 
+        // Read param 1 as the value (we already know that 1 exists, so just unwrap it).
         value = match json_as_float(h.param(1).unwrap().value()) {
-                    Ok(x) => x,
-                    Err(e) => return Err(handlebars::RenderError::new::<String>(e))
+            Ok(x) => x,
+            Err(e) => return Err(handlebars::RenderError::new::<String>(e)),
         }
 
     // If only one argument was specified, default to a decimal of 0
     } else {
-
         decimals = 0;
 
         // Read param 0 as the value
@@ -268,45 +327,55 @@ fn round_helper(h: &handlebars::Helper, _: &handlebars::Handlebars, _: &handleba
                 // Try to parse the first parameter as a float.
                 match json_as_float(p.value()) {
                     Ok(x) => x,
-                    Err(e) => return Err(handlebars::RenderError::new::<String>(e))
+                    Err(e) => return Err(handlebars::RenderError::new::<String>(e)),
                 }
-            },
+            }
             // If it doesn't exist.
-            None => return Err(handlebars::RenderError::new::<String>("Could not read the first argument.".into()))
+            None => {
+                return Err(handlebars::RenderError::new::<String>(
+                    "Could not read the first argument.".into(),
+                ))
+            }
         };
-
     }
 
     out.write(&format!("{}", round_value(value, decimals)))?;
 
     Ok(())
-
-
 }
 
 /// Helper to round a value upwards.
 ///
 /// Requires two arguments: 'power' (the power of ten to consider) and 'value' (the value to round)
-fn roundup_helper(h: &handlebars::Helper, _: &handlebars::Handlebars, _: &handlebars::Context, _: &mut handlebars::RenderContext, out: &mut dyn handlebars::Output) -> handlebars::HelperResult {
-
+fn roundup_helper(
+    h: &handlebars::Helper,
+    _: &handlebars::Handlebars,
+    _: &handlebars::Context,
+    _: &mut handlebars::RenderContext,
+    out: &mut dyn handlebars::Output,
+) -> handlebars::HelperResult {
     let decimals = match h.param(0) {
-        Some(p) => {
-            match json_as_integer(p.value()) {
-                Ok(x) => x,
-                Err(e) => return Err(handlebars::RenderError::new::<String>(e))
-            }
+        Some(p) => match json_as_integer(p.value()) {
+            Ok(x) => x,
+            Err(e) => return Err(handlebars::RenderError::new::<String>(e)),
         },
-        None => return Err(handlebars::RenderError::new::<String>("No arguments provided.".into()))
+        None => {
+            return Err(handlebars::RenderError::new::<String>(
+                "No arguments provided.".into(),
+            ))
+        }
     };
 
     let value = match h.param(1) {
-        Some(p) => {
-            match json_as_float(p.value()) {
-                Ok(x) => x,
-                Err(e) => return Err(handlebars::RenderError::new::<String>(e))
-            }
+        Some(p) => match json_as_float(p.value()) {
+            Ok(x) => x,
+            Err(e) => return Err(handlebars::RenderError::new::<String>(e)),
         },
-        None => return Err(handlebars::RenderError::new::<String>("Only one argument provided. Requires: 'power' 'value'".into()))
+        None => {
+            return Err(handlebars::RenderError::new::<String>(
+                "Only one argument provided. Requires: 'power' 'value'".into(),
+            ))
+        }
     };
 
     out.write(&format!("{}", round_value(value, -decimals)))?;
@@ -325,21 +394,19 @@ fn roundup_helper(h: &handlebars::Helper, _: &handlebars::Handlebars, _: &handle
 /// ```
 fn json_as_integer(value: &Json) -> Result<i32, String> {
     let parsed: Option<i32> = match value {
-        Json::Number(n) => {
-            match n.as_i64() {
-                Some(x) => Some(x as i32),
-                None => None
-            }
+        Json::Number(n) => match n.as_i64() {
+            Some(x) => Some(x as i32),
+            None => None,
         },
         Json::String(s) => match s.to_string().parse::<i32>() {
             Ok(x) => Some(x),
-            Err(_) => None
-        }
-        _ => None
+            Err(_) => None,
+        },
+        _ => None,
     };
     match parsed {
         Some(n) => Ok(n),
-        None => Err(format!("Could not parse {} as an integer.", value))
+        None => Err(format!("Could not parse {} as an integer.", value)),
     }
 }
 
@@ -348,7 +415,7 @@ fn json_as_integer(value: &Json) -> Result<i32, String> {
 /// # Examples
 /// ```
 /// let v = json!["2.2"];
-/// 
+///
 /// assert_eq!(json_as_float(v), 2.2);
 /// ```
 fn json_as_float(value: &Json) -> Result<f64, String> {
@@ -356,13 +423,16 @@ fn json_as_float(value: &Json) -> Result<f64, String> {
         Json::Number(n) => n.as_f64(),
         Json::String(s) => match s.to_string().parse::<f64>() {
             Ok(x) => Some(x),
-            Err(_) => None
-        }
-        _ => None
+            Err(_) => None,
+        },
+        _ => None,
     };
     match parsed {
         Some(n) => Ok(n),
-        None => Err(format!("Could not parse {} as a floating point value.", value))
+        None => Err(format!(
+            "Could not parse {} as a floating point value.",
+            value
+        )),
     }
 }
 
@@ -390,7 +460,7 @@ fn json_as_float(value: &Json) -> Result<f64, String> {
 /// assert_eq!(round_value(8999.0, -3), 9000.0);
 /// ```
 fn round_value(value: f64, decimals: i32) -> f64 {
-    (value * 10_f64.powi(decimals)).round()  / 10_f64.powi(decimals)
+    (value * 10_f64.powi(decimals)).round() / 10_f64.powi(decimals)
 }
 
 /// Fill a vector of text with data using templating.
@@ -413,25 +483,16 @@ pub fn fill_data(lines: &[String], data: &serde_json::Value) -> Vec<String> {
                 let re = e.as_render_error();
 
                 let col = match re {
-                    Some(re2) => match re2.column_no {
-                        Some(no) => no,
-                        None => 0_usize
-                    },
+                    Some(re2) => re2.column_no.unwrap_or(0_usize),
                     None => 0_usize,
                 };
 
                 let desc = match re {
                     Some(re2) => re2.desc.replace(" in strict mode", ""),
-                    None => "Unknown failure".into()
+                    None => "Unknown failure".into(),
                 };
 
-
-                let err = format!(
-                    "WARNING L{}C{}: {}\n",
-                    i + 1,
-                    col,
-                    desc
-                );
+                let err = format!("WARNING L{}C{}: {}\n", i + 1, col, desc);
                 std::io::stderr().write_all(err.as_bytes()).unwrap();
                 new_lines.push(line.to_owned())
             }
@@ -495,7 +556,7 @@ mod tests {
         let lines: Vec<String> = vec![
             "Hello".into(),
             "{{large_value}} rounded to the nearest 1000 is {{roundup 3 large_value}}".into(),
-            "{{decimal_value}} rounded to one decimal is {{round 1 decimal_value}}".into()
+            "{{decimal_value}} rounded to one decimal is {{round 1 decimal_value}}".into(),
         ];
 
         // Try the large value as an integer and decimal_value as a string.
@@ -513,32 +574,28 @@ mod tests {
 
     #[test]
     fn test_pm_helper() {
-
         let lines: Vec<String> = vec![
             "The value is {{pm data.value}}".into(),
             "The value is {{pm 1 data.value}}".into(),
-            "The other value is {{pm value2}}".into()
+            "The other value is {{pm value2}}".into(),
         ];
 
         let data = serde_json::json!({"data": {"value": 1.2345, "value_pm": 0.2345}, "value2": 2, "value2_pm": 0.1});
 
         let new_lines = fill_data(&lines, &data);
 
-
         assert_eq!(new_lines[0], "The value is 1.2345$\\pm$0.2345");
         assert_eq!(new_lines[1], "The value is 1.2$\\pm$0.2");
         assert_eq!(new_lines[2], "The other value is 2$\\pm$0.1");
-
     }
 
     #[test]
     fn test_sep_helper() {
-
         let lines: Vec<String> = vec![
             "10000 is a large number.".into(),
             "{{sep 10000}} looks better.".into(),
             "{{sep str_with_numerics}}".into(),
-            "{{sep (pm value)}}".into()
+            "{{sep (pm value)}}".into(),
         ];
 
         assert_eq!(add_separators(10000., ","), "10,000");
@@ -555,7 +612,10 @@ mod tests {
 
         assert_eq!(new_lines[0], "10000 is a large number.");
         assert_eq!(new_lines[1], "10,000 looks better.");
-        assert_eq!(new_lines[2], "Data are 12,345 years old with a mean of 1.4858");
+        assert_eq!(
+            new_lines[2],
+            "Data are 12,345 years old with a mean of 1.4858"
+        );
         assert_eq!(new_lines[3], "-123,456,789$\\pm$12,456");
     }
 }

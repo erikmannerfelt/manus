@@ -36,7 +36,6 @@ mod tests {
             .stdout(predicate::str::contains("This is written from Norway."))
             .stdout(predicate::str::contains("With two decimals, it is: 3.14"));
 
-
         let mut cmd = Command::cargo_bin("manus")?;
 
         cmd.arg("convert")
