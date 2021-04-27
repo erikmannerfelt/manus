@@ -43,8 +43,6 @@ fn sep_helper(
         }
     };
 
-    println!("{}", separator);
-
     let value = match h.param(0) {
         Some(p) => match p.value().as_str() {
             Some(s) => s.to_owned(),
@@ -489,7 +487,7 @@ pub fn fill_data(lines: &[String], data: &serde_json::Value) -> Vec<String> {
 
                 let desc = match re {
                     Some(re2) => re2.desc.replace(" in strict mode", ""),
-                    None => "Unknown failure".into(),
+                    None => "Template render error.".into(),
                 };
 
                 let err = format!("WARNING L{}C{}: {}\n", i + 1, col, desc);

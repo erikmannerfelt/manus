@@ -46,20 +46,19 @@ fn parse_cli_args() -> Result<String, String> {
                 .arg(
                     Arg::new("INPUT")
                         .about("The input root tex file. If '-', read from stdin.")
-                        .required(true)
-                        .index(1),
+                        .required(true),
                 )
                 .arg(
                     Arg::new("OUTPUT")
                         .about("The output pdf path. Defaults to the current directory.")
-                        .required(false)
-                        .index(2),
+                        .required(false),
                 )
                 .arg(
                     Arg::new("DATA")
                         .about("Data filepath. If '-', read from stdin.")
                         .short('d')
-                        .long("data"),
+                        .long("data")
+                        .takes_value(true),
                 )
                 .arg(
                     Arg::new("KEEP_INTERMEDIATES")
@@ -145,7 +144,7 @@ fn parse_cli_args() -> Result<String, String> {
         let synctex = matches.is_present("SYNCTEX");
 
         if let Some(parent) = pdf_filepath.parent() {
-            if !parent.is_dir() {
+            if !parent.is_dir() & !parent.to_str().unwrap().is_empty() {
                 return Err(format!(
                     "Parent directory '{}' does not exist",
                     parent.to_str().unwrap()
@@ -327,13 +326,20 @@ fn merge_tex(filepath: &Path) -> Result<Vec<String>, Box<dyn std::error::Error>>
     let main_lines = io::read_tex(&filepath)?;
 
     // Loop over the lines and handle any \input clauses.
+    let mut i = 0;
     for line in main_lines {
         // If it doesn't contain and input, just continue.
         if !line.contains(r"\input{") {
             lines.push(line);
+            i += 1;
             continue;
         }
-        let mut input_path = PathBuf::from(line.replace(r"\input{", "").replace("}", ""));
+        let mut trimmed_line = line[(line.find(r"\input{").unwrap() + 7)..].to_owned();
+        trimmed_line = trimmed_line[..trimmed_line
+            .find('}')
+            .unwrap_or_else(|| panic!("Unclosed delimiter at line {}", i))]
+            .to_owned();
+        let mut input_path = PathBuf::from(trimmed_line);
 
         if input_path.extension().is_none() {
             let _ = input_path.set_extension("tex");
@@ -348,6 +354,7 @@ fn merge_tex(filepath: &Path) -> Result<Vec<String>, Box<dyn std::error::Error>>
         for input_line in input_lines {
             lines.push(input_line)
         }
+        i += 1;
     }
     Ok(lines)
 }
