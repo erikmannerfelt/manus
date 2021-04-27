@@ -184,14 +184,12 @@ fn pm_helper(
             None => {
                 let e = match attr.relative_path() {
                     Some(rp) => format!("pm got invalid data path: {:?}", rp),
-                    None => {
-                        match attr.value() {
-                            Json::Null => "No argument was found.".to_string(),
-                            v => format!("pm argument: {} is not a valid data path.", v.to_string())
-                        }
-                    }
+                    None => match attr.value() {
+                        Json::Null => "No argument was found.".to_string(),
+                        v => format!("pm argument: {} is not a valid data path.", v.to_string()),
+                    },
                 };
-                return Err(handlebars::RenderError::new::<String>(e))
+                return Err(handlebars::RenderError::new::<String>(e));
             }
         },
         // It only reaches here if no argument was given.
