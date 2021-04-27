@@ -8,14 +8,15 @@ mod templates;
 
 fn main() -> std::io::Result<()> {
     match parse_cli_args() {
-        Ok(x) => std::io::stdout().write_all(x.as_bytes())?,
+        Ok(x) => {
+            std::io::stdout().write_all(x.as_bytes())?;
+            std::process::exit(0)
+        }
         Err(x) => {
             std::io::stderr().write_all(x.as_bytes())?;
             std::process::exit(1)
         }
     };
-
-    Ok(())
 }
 
 ///Handle the CLI arguments.
@@ -44,7 +45,7 @@ fn parse_cli_args() -> Result<String, String> {
                 .about("Render the manuscript with tectonic.")
                 .arg(
                     Arg::new("INPUT")
-                        .about("The input root tex file.")
+                        .about("The input root tex file. If '-', read from stdin.")
                         .required(true)
                         .index(1),
                 )
@@ -54,7 +55,12 @@ fn parse_cli_args() -> Result<String, String> {
                         .required(false)
                         .index(2),
                 )
-                .arg(Arg::new("DATA").about("Data file").short('d').long("data"))
+                .arg(
+                    Arg::new("DATA")
+                        .about("Data filepath. If '-', read from stdin.")
+                        .short('d')
+                        .long("data"),
+                )
                 .arg(
                     Arg::new("KEEP_INTERMEDIATES")
                         .about("Keep intermediate files.")
@@ -73,13 +79,13 @@ fn parse_cli_args() -> Result<String, String> {
                 .about("Convert to different formats.")
                 .arg(
                     Arg::new("INPUT")
-                        .about("The input root tex file")
+                        .about("The input root tex file. If '-', read from stdin.")
                         .required(true)
                         .index(1),
                 )
                 .arg(
                     Arg::new("DATA")
-                        .about("Data file")
+                        .about("Data filepath. If '-', read from stdin.")
                         .short('d')
                         .long("data")
                         .takes_value(true),
@@ -114,32 +120,38 @@ fn parse_cli_args() -> Result<String, String> {
             .value_of("INPUT")
             .expect("It's a required argument so this shouldn't fail.");
 
-        // Check that the file exists and return a valid PathBuf.
-        let filepath = match parse_filepath(&path_str, Some("tex")) {
-            Ok(fp) => fp,
-            Err(e) => return Err(format!("{:?}", e)),
-        };
+        // Try to read the lines from the path (or stdin) and return the given (or appropriate if not given) pdf filepath
+        let (mut lines, pdf_filepath) =
+            match io::get_lines_and_output_path(path_str, matches.value_of("OUTPUT")) {
+                Ok(x) => x,
+                Err(e) => return Err(e.to_string()),
+            };
 
-        // Read and merge all tex files.
-        let lines = match merge_tex(&filepath) {
-            Ok(l) => l,
-            Err(e) => return Err(format!("{:?}", e)),
-        };
+        // Fill the data if a data path was given.
+        if let Some(datafile) = matches.value_of("DATA") {
+            // If both the datafile and path_str was -, raise an error.
+            if (datafile.trim() == "-") & (path_str.trim() == "-") {
+                return Err("Input tex and data cannot both be from stdin.".into());
+            };
+            let data = match io::get_data_from_str(&datafile) {
+                Ok(v) => v,
+                Err(e) => return Err(e.to_string()),
+            };
 
-        // Either get the filepath from the OUTPUT argument, or call it the same filename as the
-        // input but with a changed extension.
-        let pdf_filepath = match matches.value_of("OUTPUT") {
-            Some(x) => PathBuf::from(x),
-            None => {
-                let mut fp = PathBuf::from(filepath.file_name().unwrap());
-                fp.set_extension("pdf");
-                fp
-            }
+            lines = templates::fill_data(&lines, &data);
         };
 
         let keep_intermediates = matches.is_present("KEEP_INTERMEDIATES");
         let synctex = matches.is_present("SYNCTEX");
 
+        if let Some(parent) = pdf_filepath.parent() {
+            if !parent.is_dir() {
+                return Err(format!(
+                    "Parent directory '{}' does not exist",
+                    parent.to_str().unwrap()
+                ));
+            }
+        }
         // Render the PDF
         match run_tectonic(
             &lines.join("\n"),
@@ -150,7 +162,9 @@ fn parse_cli_args() -> Result<String, String> {
             Ok(_) => (),
             Err(_) if verbosity == 0 => return Err("Tectonic exited with an error. Run the command with --verbose to find out what went wrong.".into()),
             Err(_) => ()
-        }
+        };
+
+        return Ok("".into());
     }
 
     // 'convert' subcommand parser
@@ -160,32 +174,26 @@ fn parse_cli_args() -> Result<String, String> {
             .value_of("INPUT")
             .expect("It's a reqired argument so this won't fail.");
 
-        // Check that the file exists and return a valid PathBuf.
-        let filepath = match parse_filepath(&path_str, Some("tex")) {
-            Ok(fp) => fp,
-            Err(e) => return Err(format!("{:?}", e)),
-        };
-
-        // Write the result to stdout if it worked or the error to stderr if it didn't.
-        let mut lines = match merge_tex(&filepath) {
-            Ok(lines) => lines,
-            Err(message) => return Err(format!("{:?}", message)),
-        };
-
-        // Parse the data argument and do template filling in case it was given.
-        if let Some(data_path_str) = matches.value_of("DATA") {
-            let data_path = match parse_filepath(&data_path_str, Some("json")) {
-                Ok(fp) => fp,
-                Err(e) => return Err(format!("{:?}", e)),
+        // Try to read the lines from the path (or stdin) and return the given (or appropriate if not given) pdf filepath
+        let (mut lines, _) =
+            match io::get_lines_and_output_path(path_str, matches.value_of("OUTPUT")) {
+                Ok(x) => x,
+                Err(e) => return Err(e.to_string()),
             };
 
-            let data = match io::read_data(&data_path) {
-                Ok(d) => d,
-                Err(e) => return Err(format!("{:?}", e)),
+        // Fill the data if a data path was given.
+        if let Some(datafile) = matches.value_of("DATA") {
+            // If both the datafile and path_str was -, raise an error.
+            if (datafile.trim() == "-") & (path_str.trim() == "-") {
+                return Err("Input tex and data cannot both be from stdin.".into());
+            };
+            let data = match io::get_data_from_str(&datafile) {
+                Ok(v) => v,
+                Err(e) => return Err(e.to_string()),
             };
 
             lines = templates::fill_data(&lines, &data);
-        }
+        };
 
         // Return the text to write to stdout.
         return Ok(lines.join("\n"));
@@ -199,7 +207,7 @@ fn parse_cli_args() -> Result<String, String> {
             .expect("It's a reqired argument so this won't fail.");
 
         // Check that the file exists and return a valid PathBuf.
-        let filepath = match parse_filepath(&path_str, Some("tex")) {
+        let filepath = match io::parse_filepath(&path_str, Some("tex")) {
             Ok(fp) => fp,
             Err(e) => return Err(format!("{:?}", e)),
         };
@@ -291,6 +299,11 @@ fn run_tectonic(
             let mut path = PathBuf::from(output_path.file_stem().unwrap());
             path.set_extension(extension);
 
+            // If the output path has a parent, append this to the filename.
+            if let Some(parent) = output_path.parent() {
+                path = parent.join(path);
+            }
+
             // Create a new file and write the PDF data to it.
             let mut file = File::create(&path)
                 .unwrap_or_else(|_| panic!("Could not open {} to write", path.to_str().unwrap()));
@@ -300,48 +313,6 @@ fn run_tectonic(
     }
 
     Ok(())
-}
-
-/// Try to parse and return a filepath.
-///
-/// # Arguments
-/// - `filepath_str`: A relative or absolute filepath string.
-/// - `expected_extension`: Optional. The expected extension. An extension-less path will be assigned it.
-///
-/// # Errors
-/// If the path does not exist or an incorrect path/extension was given.
-///
-/// # Returns
-/// A filepath, if a file with its name exists and it has the correct extension.
-fn parse_filepath(
-    filepath_str: &str,
-    expected_extension: Option<&str>,
-) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    // Create a PathBuf from the input string.
-    let mut path = PathBuf::from(filepath_str);
-
-    // If expected_extension was given, make sure they match.
-    if let Some(ext) = expected_extension {
-        // If the path has an extension, validate it to the expected one.
-        // If the path has no extension, append the expected_extension to the path.
-        match path.extension() {
-            Some(ext2) => {
-                if ext2 != ext {
-                    return Err(
-                        format!("Incorrect extension: {:?}. Expected: {}", ext2, ext).into(),
-                    );
-                }
-            }
-            None => {
-                path.set_extension(ext);
-            }
-        }
-    }
-    // Check that the file exists.
-    if !path.is_file() {
-        return Err("File not found".into());
-    }
-    Ok(path)
 }
 
 /// Read a tex file and recursively merge all \\input{} statements.
@@ -385,17 +356,6 @@ fn merge_tex(filepath: &Path) -> Result<Vec<String>, Box<dyn std::error::Error>>
 mod tests {
 
     use super::*;
-
-    #[test]
-    fn test_parse_filepath() {
-        parse_filepath("tests/data/case1/main.tex", Some("tex")).expect("This should exist");
-
-        parse_filepath("tests/data/case1/main.tex", Some("text")).expect_err("This should fail");
-
-        parse_filepath("tests/data/case1/main", Some("tex")).expect("This should pass");
-
-        parse_filepath("Cargo.toml", Some("toml")).expect("This should pass");
-    }
 
     #[test]
     fn test_merge_tex() {
