@@ -964,6 +964,7 @@ dependencies = [
  "predicates",
  "serde_json",
  "tectonic",
+ "tempfile",
 ]
 
 [[package]]
