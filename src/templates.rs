@@ -106,6 +106,8 @@ fn add_separators(number: f64, separator: &str) -> String {
     // Convert the number into a string.
     let number_str = format!("{}", number);
 
+    let separator_backwards = separator.chars().rev().collect::<String>();
+
     // Convert the real part of the number into a string.
     let real_part_str = format!("{}", number.trunc() as i64);
 
@@ -122,7 +124,7 @@ fn add_separators(number: f64, separator: &str) -> String {
     {
         // If the numbering is divisible by 3, add a separator.
         if (i % 3 == 0) & (i > 0) {
-            new_real_str_rev.push_str(separator);
+            new_real_str_rev.push_str(&separator_backwards);
         };
         // Push the digit as owned.
         new_real_str_rev.push(*c);
@@ -180,10 +182,14 @@ fn pm_helper(
             Some(v) => v,
             // Otherwise, raise an error.
             None => {
-                return Err(handlebars::RenderError::new::<String>(format!(
-                    "pm argument: {} was not a valid data path.",
-                    attr.value().to_string()
-                )))
+                let e = match attr.relative_path() {
+                    Some(rp) => format!("pm got invalid data path: {:?}", rp),
+                    None => match attr.value() {
+                        Json::Null => "No argument was found.".to_string(),
+                        v => format!("pm argument: {} is not a valid data path.", v.to_string()),
+                    },
+                };
+                return Err(handlebars::RenderError::new::<String>(e));
             }
         },
         // It only reaches here if no argument was given.
@@ -598,6 +604,7 @@ mod tests {
 
         assert_eq!(add_separators(10000., ","), "10,000");
         assert_eq!(add_separators(123456.78901, ","), "123,456.78901");
+        assert_eq!(add_separators(123456., "\\,"), "123\\,456");
 
         let data = serde_json::json!({
             "separator": ",",
