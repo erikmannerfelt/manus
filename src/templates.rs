@@ -295,14 +295,27 @@ pub fn fill_data(lines: &[String], data: &serde_json::Value) -> Vec<String> {
         match reg.render_template(line, data) {
             Ok(l) => new_lines.push(l),
             Err(e) => {
+                let re = e.as_render_error();
+
+                let col = match re {
+                    Some(re2) => match re2.column_no {
+                        Some(no) => no,
+                        None => 0_usize
+                    },
+                    None => 0_usize,
+                };
+
+                let desc = match re {
+                    Some(re2) => re2.desc.replace(" in strict mode", ""),
+                    None => "Unknown failure".into()
+                };
+
+
                 let err = format!(
                     "WARNING L{}C{}: {}\n",
                     i + 1,
-                    e.as_render_error().unwrap().column_no.unwrap(),
-                    e.as_render_error()
-                        .unwrap()
-                        .desc
-                        .replace(" in strict mode", "")
+                    col,
+                    desc
                 );
                 std::io::stderr().write_all(err.as_bytes()).unwrap();
                 new_lines.push(line.to_owned())
