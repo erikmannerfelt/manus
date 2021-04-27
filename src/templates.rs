@@ -5,6 +5,101 @@ use std::io::Write;
 handlebars_helper!(upper: | s: str | s.to_uppercase());
 handlebars_helper!(lower: |s:str| s.to_lowercase());
 
+/// Helper to make large numbers more readable using a 1000s separator.
+///
+/// Given the data:
+/// ```
+/// {
+///     "separator": ",",
+///     "large_value": 123456789
+/// }
+/// ```
+/// the helper "{{sep value}}" will render: "`123,456,789`".
+///
+/// Note that the "separator" key needs to exist in the data file.
+///
+fn sep_helper(h: &handlebars::Helper, _: &handlebars::Handlebars, context: &handlebars::Context, _: &mut handlebars::RenderContext, out: &mut dyn handlebars::Output) -> handlebars::HelperResult {
+
+    // Check that only argument was provided.
+    if h.param(1).is_some() {
+        return Err(handlebars::RenderError::new::<String>("pm only takes two arguments. More were given.".into()));
+    };
+
+    let data = context.data();
+
+    let separator = match data.get("separator") {
+        Some(v) => v.as_str().unwrap(),
+        None => return Err(handlebars::RenderError::new::<String>("Could not find the \"separator\" key in the data file. Please add it.".into()))
+    };
+
+
+    println!("{}", separator);
+
+    let value = match h.param(0) {
+        Some(p) => match p.value().as_str() {
+            Some(s) => s.to_owned(),
+            None => p.value().to_string()
+        },
+        None => return Err(handlebars::RenderError::new::<String>("Could not read the second argument..".into()))
+    };
+
+    let mut new_value = String::new();
+
+    let mut number_buffer = String::new();
+    let mut in_digit = false;
+    let mut n_periods = 0;
+    for c in value.chars() {
+        if c == '.' {
+            n_periods += 1;
+        } else {
+            n_periods = 0;
+        };
+        in_digit = c.is_ascii_digit() | (in_digit & (n_periods == 1));
+
+
+        if in_digit {
+            number_buffer.push(c);
+        } else {
+            if number_buffer.len() > 0 {
+                let number = number_buffer.parse::<f64>().unwrap();
+                new_value += &add_separators(number, separator);
+                number_buffer.clear();
+            }
+            new_value.push(c);
+        };
+    }
+    if number_buffer.len() > 0 {
+        let number = number_buffer.parse::<f64>().unwrap();
+        new_value += &add_separators(number, separator);
+    }
+
+    out.write(&new_value)?;
+
+    Ok(())
+
+
+}
+
+fn add_separators(number: f64, separator: &str) -> String {
+
+    let number_str = format!("{}", number);
+
+    let real_part_str = format!("{}", number.trunc() as i64);
+
+    let cs: Vec<char> = real_part_str.chars().collect();
+
+    let mut new_real_str = String::new();
+    for (i, c) in cs.iter().rev().enumerate() {
+        if i % 3 == 0 {
+            new_real_str.push_str(separator);
+        };
+        new_real_str.push(*c);
+    };
+    new_real_str = new_real_str.replacen(separator, "", 1);
+    let new_real_right_order: String = new_real_str.chars().rev().collect::<String>();
+
+    number_str.replace(&real_part_str, &new_real_right_order)
+}
 
 /// Helper to work with error values.
 ///
@@ -289,6 +384,7 @@ pub fn fill_data(lines: &[String], data: &serde_json::Value) -> Vec<String> {
     reg.register_helper("round", Box::new(round_helper));
     reg.register_helper("roundup", Box::new(roundup_helper));
     reg.register_helper("pm", Box::new(pm_helper));
+    reg.register_helper("sep", Box::new(sep_helper));
     reg.set_strict_mode(true);
 
     for (i, line) in lines.iter().enumerate() {
@@ -414,5 +510,33 @@ mod tests {
         assert_eq!(new_lines[1], "The value is 1.2$\\pm$0.2");
         assert_eq!(new_lines[2], "The other value is 2$\\pm$0.1");
 
+    }
+
+    #[test]
+    fn test_sep_helper() {
+
+        let lines: Vec<String> = vec![
+            "10000 is a large number.".into(),
+            "{{sep 10000}} looks better.".into(),
+            "{{sep str_with_numerics}}".into(),
+            "{{sep (pm value)}}".into()
+        ];
+
+        assert_eq!(add_separators(10000., ","), "10,000");
+        assert_eq!(add_separators(123456.78901, ","), "123,456.78901");
+
+        let data = serde_json::json!({
+            "separator": ",",
+            "str_with_numerics": "Data are 12345 years old with a mean of 1.4858",
+            "value": 123456789,
+            "value_pm": 12456
+        });
+
+        let new_lines = fill_data(&lines, &data);
+
+        assert_eq!(new_lines[0], "10000 is a large number.");
+        assert_eq!(new_lines[1], "10,000 looks better.");
+        assert_eq!(new_lines[2], "Data are 12,345 years old with a mean of 1.4858");
+        assert_eq!(new_lines[3], "123,456,789$\\pm$12,456");
     }
 }
