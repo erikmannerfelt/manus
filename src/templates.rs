@@ -80,25 +80,44 @@ fn sep_helper(h: &handlebars::Helper, _: &handlebars::Handlebars, context: &hand
 
 }
 
+/// Add 1000s separators for a number
+///
+/// # Arguments
+/// * `number`: The number to make more readable
+/// * `separator`: The string to separate 1000s with
+///
+/// # Examples
+/// ```
+/// assert_eq!(add_separators(12345.678, ","), "12,345.678")
+/// ```
+///
+/// # Returns
+/// A more readable string representation of the number.
 fn add_separators(number: f64, separator: &str) -> String {
 
+    // Convert the number into a string.
     let number_str = format!("{}", number);
 
+    // Convert the real part of the number into a string.
     let real_part_str = format!("{}", number.trunc() as i64);
 
-    let cs: Vec<char> = real_part_str.chars().collect();
-
-    let mut new_real_str = String::new();
-    for (i, c) in cs.iter().rev().enumerate() {
-        if i % 3 == 0 {
-            new_real_str.push_str(separator);
+    // Create an empty string of the new more readable real part of the number
+    // It will be filled in backwards, so it will be reversed.
+    let mut new_real_str_rev = String::new();
+    // Loop over the real part in reverse.
+    for (i, c) in real_part_str.chars().collect::<Vec<char>>().iter().rev().enumerate() {
+        // If the numbering is divisible by 3, add a separator.
+        if (i % 3 == 0) & (i > 0) {
+            new_real_str_rev.push_str(separator);
         };
-        new_real_str.push(*c);
+        // Push the digit as owned.
+        new_real_str_rev.push(*c);
     };
-    new_real_str = new_real_str.replacen(separator, "", 1);
-    let new_real_right_order: String = new_real_str.chars().rev().collect::<String>();
+    // Reorder the characters to be in the right direction.
+    let new_real_str: String = new_real_str_rev.chars().rev().collect::<String>();
 
-    number_str.replace(&real_part_str, &new_real_right_order)
+    // Replace the real part of the number with the new more readable version.
+    number_str.replace(&real_part_str, &new_real_str)
 }
 
 /// Helper to work with error values.
@@ -528,7 +547,7 @@ mod tests {
         let data = serde_json::json!({
             "separator": ",",
             "str_with_numerics": "Data are 12345 years old with a mean of 1.4858",
-            "value": 123456789,
+            "value": -123456789,
             "value_pm": 12456
         });
 
@@ -537,6 +556,6 @@ mod tests {
         assert_eq!(new_lines[0], "10000 is a large number.");
         assert_eq!(new_lines[1], "10,000 looks better.");
         assert_eq!(new_lines[2], "Data are 12,345 years old with a mean of 1.4858");
-        assert_eq!(new_lines[3], "123,456,789$\\pm$12,456");
+        assert_eq!(new_lines[3], "-123,456,789$\\pm$12,456");
     }
 }
