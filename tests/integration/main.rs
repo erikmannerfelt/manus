@@ -33,7 +33,19 @@ mod tests {
             .stdout(predicate::str::contains(
                 "The year 2000 can be called the two thousands.",
             ))
-            .stdout(predicate::str::contains("This is written from Norway."));
+            .stdout(predicate::str::contains("This is written from Norway."))
+            .stdout(predicate::str::contains("With two decimals, it is: 3.14"));
+
+        let mut cmd = Command::cargo_bin("manus")?;
+
+        cmd.arg("convert")
+            .arg("--format=tex")
+            .arg("--data=tests/data/case3/data.json")
+            .arg("tests/data/case3/main.tex");
+
+        cmd.assert()
+            .success()
+            .stdout(predicate::str::contains("mean change of 1.3$\\pm$0.5 m"));
 
         Ok(())
     }
