@@ -1,0 +1,5 @@
+number = 0.4
+
+[data]
+number1 = 1  # This is a comment.
+number2 = 2

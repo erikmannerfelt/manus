@@ -135,4 +135,25 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_toml_data() -> Result<(), Box<dyn std::error::Error>> {
+        let mut cmd = Command::cargo_bin("manus")?;
+
+        cmd.arg("convert")
+            .arg("--data=tests/data/case4/data.toml")
+            .arg("--format=tex")
+            .arg("tests/data/case4/main.tex");
+
+        cmd.assert()
+            .success()
+            .stdout(predicate::str::contains(
+                "Number zero point four is 0.4 in numeric",
+            ))
+            .stdout(predicate::str::contains(
+                "The first numbers from one are: 1 and 2.",
+            ));
+
+        Ok(())
+    }
 }

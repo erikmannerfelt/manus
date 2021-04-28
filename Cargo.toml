@@ -10,6 +10,7 @@ edition = "2018"
 tectonic = "0.4.1"
 handlebars = "*"
 serde_json = "*"
+toml = "*"
 eval = "*"
 
 [dependencies.clap]

@@ -159,10 +159,22 @@ pub fn read_tex_from_stdin() -> Result<Vec<String>, Box<dyn std::error::Error>> 
 /// Read a json data file into an arbitrary JSON dictionary.
 pub fn read_data(filepath: &Path) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
     let file = File::open(filepath)?;
-    let reader = std::io::BufReader::new(file);
+    let mut reader = std::io::BufReader::new(file);
 
-    let data: serde_json::Value = serde_json::from_reader(reader)?;
+    let mut buf = String::new();
+    reader.read_to_string(&mut buf)?;
 
+    let extension = filepath
+        .extension()
+        .expect("Data file read with no extension!")
+        .to_str()
+        .unwrap();
+
+    let data: Json = match extension {
+        "json" => serde_json::from_str(&buf)?,
+        "toml" => toml::from_str(&buf)?,
+        s => return Err(format!("Could not read data type: {}", s).into()),
+    };
     Ok(data)
 }
 
