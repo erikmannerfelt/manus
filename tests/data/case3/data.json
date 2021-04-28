@@ -1,10 +1,14 @@
 {
+	"separator": "\\,",
 	"units": {
 		"change": "m",
-		"volume_change": "m a"
+		"volume_change": "m$^3$"
 	},
 	"results": {
 		"change": 1.2805909,
-		"change_pm": 0.49567
+		"area": 10000,
+		"change_pm": 0.49567,
+		"change_vol": "expr: results.change * results.area",
+		"change_vol_pm": "expr: results.change_pm * results.area"
 	}
 }
