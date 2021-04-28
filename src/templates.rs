@@ -468,7 +468,9 @@ fn round_value(value: f64, decimals: i32) -> f64 {
 }
 
 /// Fill a vector of text with data using templating.
-pub fn fill_data(lines: &[String], data: &serde_json::Value) -> Vec<String> {
+pub fn fill_data(lines: &[String], data: &serde_json::Value) -> Result<Vec<String>, String> {
+    let parsed_data = evaluate_all_expressions(data)?;
+
     let mut new_lines: Vec<String> = Vec::new();
 
     let mut reg = handlebars::Handlebars::new();
@@ -481,7 +483,7 @@ pub fn fill_data(lines: &[String], data: &serde_json::Value) -> Vec<String> {
     reg.set_strict_mode(true);
 
     for (i, line) in lines.iter().enumerate() {
-        match reg.render_template(line, data) {
+        match reg.render_template(line, &parsed_data) {
             Ok(l) => new_lines.push(l),
             Err(e) => {
                 let re = e.as_render_error();
@@ -511,7 +513,255 @@ pub fn fill_data(lines: &[String], data: &serde_json::Value) -> Vec<String> {
         */
     }
 
-    new_lines
+    Ok(new_lines)
+}
+
+/// Recursively find all expressions (strings starting with "expr:") in a json object.
+///
+/// # Arguments
+/// * `data`: The json to find expressions in.
+/// * `parent`: Parent keys to append to the output (only matters internally for recursion)
+///
+/// # Returns
+/// A vector of expressions, where each expression is (vector of keys to find it, expression).
+/// If no expressions are found, this will be empty.
+fn find_expressions(data: &Json, parent: Option<&Vec<String>>) -> Vec<(Vec<String>, String)> {
+    // The parent relative to the current tree is empty if parent was None or the given parent.
+    let relative_parent: Vec<String> = match parent {
+        Some(p) => p.to_owned(),
+        None => Vec::new(),
+    };
+
+    // Create an empty output variable.
+    let mut output: Vec<(Vec<String>, String)> = Vec::new();
+
+    // If the json is an array, parse all expressions in the array.
+    if let Json::Array(arr) = data {
+        // Loop through the array
+        for val in arr {
+            // Recursively find all expressions in the json value.
+            // The parent argument helps retaining the right tree structure.
+            let expressions = find_expressions(val, Some(&relative_parent));
+
+            // Push all found expressions into the output.
+            for expression in expressions {
+                output.push(expression);
+            }
+        }
+    };
+    // If the json is an object (mental note: equivalent to a python dictionary)
+    if let Json::Object(obj) = data {
+        // Loop through all key-value pairs.
+        for (key, val) in obj {
+            // The relative parent of this pair is the upper relative parent plus the key.
+            let mut relative_parent2 = relative_parent.to_owned();
+            relative_parent2.push(key.to_owned());
+
+            // Find all expressions in that value.
+            let expressions = find_expressions(val, Some(&relative_parent2));
+
+            // Push all expressions to the output.
+            for expression in expressions {
+                output.push(expression);
+            }
+        }
+    };
+    // If the json is a string and it countains "expr:", push it to the output.
+    if let Json::String(string) = data {
+        if string.trim().starts_with("expr:") {
+            output.push((relative_parent, string.to_owned()));
+        }
+    };
+    // If the json is any other type of value, it will be skipped.
+
+    output
+}
+
+/// Evaluate a mathematical expression return a useful error if it fails.
+///
+/// It is basically just calling the "eval" crate, but handles error messages better than the
+/// crate does per default.
+///
+/// # Arguments
+/// * `expr_string`: The expression to evaluate.
+/// * `data`: The data "context" to get variables from.
+///
+/// # Returns
+/// The result of the evaluated expression, or an error detailing why it failed.
+fn run_eval(expr_string: &str, data: &Json) -> Result<Json, String> {
+    // Create an expression object from the string.
+    let mut expr = eval::Expr::new(expr_string);
+
+    // All this is to implement the round function. Oboy!
+    expr = expr.function("round", |args: Vec<Json>| {
+        // Parse the first argument as the value to round.
+        let value = match args.get(0) {
+            Some(Json::Number(x)) => x.as_f64().unwrap(),
+            _ => return Err(eval::Error::ExpectedNumber),
+        };
+        // Parse the second argument as the decimal.
+        let decimals = match args.get(1) {
+            // If it's a number, parse it as f64
+            Some(Json::Number(x)) => x.as_f64().unwrap(),
+            // If it's anything else than a number, return an error
+            Some(_) => return Err(eval::Error::ExpectedNumber),
+            // If the argument was not given, default to 0
+            None => 0.0,
+        };
+
+        // Return an error if the decimal number is not equivalent to an integer.
+        if decimals.fract() > 0.0 {
+            return Err(eval::Error::Custom(format!(
+                "Second rounding argument must be an integer. Given value: {}",
+                decimals
+            )));
+        };
+
+        // Round the number and return it appropriately.
+        let rounded = round_value(value, decimals as i32);
+
+        // If the value is equivalent of an integer, return an integer form of it.
+        match rounded.fract() == 0.0 {
+            true => Ok(serde_json::json!(rounded as i64)),
+            false => Ok(serde_json::json!(rounded)),
+        }
+    });
+
+    // Fill the expression with variables from the data.
+    // TODO: Look into if the "json has to be object" check may have side-effects.
+    if let Json::Object(obj) = data {
+        for (key, val) in obj {
+            expr = expr.value(key, val);
+        }
+    };
+
+    // Execute the expression.
+    match expr.exec() {
+        Err(err) => {
+            let mut err_str = err.to_string();
+
+            // If a null was encountered, it is likely that a conexistent key was indexed.
+            if err_str.contains("Null") {
+                err_str += ". Perhaps a key is misspelled?"
+            }
+
+            Err(format!(
+                "Error in expression: '{}': {}",
+                expr_string, err_str
+            ))
+        }
+        Ok(Json::Null) => Err(format!("Expression '{}' returned Null value", expr_string)),
+        Ok(v) => Ok(v),
+    }
+}
+
+/// Evaluate an expression. If needed, recursively evaluate other expressions that it depends on.
+///
+/// # Arguments
+/// * `expression`: The expression to evaluate.
+/// * `data`: The "context" data to parse variables from.
+/// * `recursion_depth`: The current recursion depth (only needed internally).
+fn evaluate_expression(
+    expression: &str,
+    data: &Json,
+    recursion_depth: usize,
+) -> Result<Json, String> {
+    // Avoid circular expressions by setting a max recursion depth.
+    if recursion_depth > 1000 {
+        return Err(format!(
+            "Max recursion depth reached for expression: '{}'. Maybe due to a circular expression?",
+            expression
+        ));
+    };
+
+    // Format the expression string and remove the "expr:" part.
+    let mut expr_string = expression.replacen("expr:", "", 1).trim().to_owned();
+
+    // Find any expressions in the data and check if an associated key is referred to in the
+    // expression.
+    let expressions = find_expressions(data, None);
+    for (keys, expression_str) in &expressions {
+        // If the key exists in the current expression, evaluate the referred expression first.
+        // TODO: Maybe make data mutable so all expressions only have to be evaluated once?
+        if expr_string.contains(&keys.join(".")) {
+            // Evaluate the referred expression.
+            let value = evaluate_expression(&expression_str, &data, recursion_depth + 1)?;
+            // Replace its key in the current expression with the evaluated value.
+            expr_string = expr_string.replace(&keys.join("."), &value.to_string());
+        }
+    }
+
+    // Now that all potential referred expressions have been evaluated, evaluate the current one.
+    run_eval(&expr_string, &data)
+}
+
+/// Set data in a json at an arbitrary tree depth.
+///
+/// It does not set new keys, it only replaces the content of an existing key.
+///
+/// # Arguments
+/// * `data`: The json to set a value in.
+/// * `keys`: A vector of keys to index `data` with.
+/// * `value`: The new value to set
+///
+/// # Returns
+/// Nothing if it worked, or an error saying "Key not found" if the key did not exist.
+fn replace_value_in_data(data: &mut Json, keys: &[String], value: Json) -> Result<(), String> {
+    // If the keys is not just a single key, recursively dive into the tree.
+    if keys.len() > 1 {
+        // Extract the first key.
+        let first_key = &keys[0];
+
+        // Try to get the value of the first key.
+        let mut subset = match data.get_mut(first_key) {
+            Some(s) => s,
+            None => return Err("Key not found".into()),
+        };
+        // Run the function again on the next keys.
+        replace_value_in_data(&mut subset, &keys[1..], value)?;
+    } else {
+        // If the keys is a single key (it will be reached using recursion if not)...
+        // ... try to set the value.
+
+        match data.get_mut(&keys[0]) {
+            Some(v) => (*v = value),
+            None => return Err("Key not found".into()),
+        };
+    };
+
+    Ok(())
+}
+
+/// Try to evaluate all expressions in a data file.
+///
+/// # Arguments
+/// `data`: The data file to evaluate expressions inside.
+///
+/// # Returns
+/// A copy of the data file with expressions filled, or an error detailing why it failed.
+fn evaluate_all_expressions(data: &Json) -> Result<Json, String> {
+    let mut new_data = data.clone();
+
+    // Find all expressions and evaluate them (recursively if needed)
+    for (keys, expr_string) in find_expressions(data, None) {
+        let new_value = match evaluate_expression(&expr_string, &new_data, 0) {
+            Ok(v) => v,
+            Err(e) => {
+                return Err(format!(
+                    "Error for expression in '{}' ('{}'): {:?}",
+                    keys.join("."),
+                    expr_string,
+                    e
+                ))
+            }
+        };
+        // Replace the expression with the evaluated value.
+        match replace_value_in_data(&mut new_data, &keys, new_value) {
+            Ok(_) => (),
+            Err(e) => return Err(format!("Error setting key '{}': {}", keys.join("."), e)),
+        };
+    }
+    Ok(new_data)
 }
 
 #[cfg(test)]
@@ -530,7 +780,7 @@ mod tests {
 
         let data = serde_json::json!({"years": 24});
 
-        let new_lines = fill_data(&lines, &data);
+        let new_lines = fill_data(&lines, &data).unwrap();
 
         assert_eq!(new_lines[1], "I am 24 years old.");
     }
@@ -549,7 +799,7 @@ mod tests {
             "This package is called {{package_name}}.".into(),
         ];
 
-        let new_lines = fill_data(&lines, &data);
+        let new_lines = fill_data(&lines, &data).unwrap();
 
         assert_eq!(new_lines[0], "The year was once 2000");
         assert_eq!(new_lines[1], "This package is called manus.")
@@ -566,7 +816,7 @@ mod tests {
         // Try the large value as an integer and decimal_value as a string.
         let data = serde_json::json!({"large_value": 8699, "decimal_value": "1.234"});
 
-        let new_lines = fill_data(&lines, &data);
+        let new_lines = fill_data(&lines, &data).unwrap();
 
         assert_eq!(round_value(1.234, 1), 1.2);
         assert_eq!(round_value(8699_f64, -3), 9000.0);
@@ -586,7 +836,7 @@ mod tests {
 
         let data = serde_json::json!({"data": {"value": 1.2345, "value_pm": 0.2345}, "value2": 2, "value2_pm": 0.1});
 
-        let new_lines = fill_data(&lines, &data);
+        let new_lines = fill_data(&lines, &data).unwrap();
 
         assert_eq!(new_lines[0], "The value is 1.2345$\\pm$0.2345");
         assert_eq!(new_lines[1], "The value is 1.2$\\pm$0.2");
@@ -613,7 +863,7 @@ mod tests {
             "value_pm": 12456
         });
 
-        let new_lines = fill_data(&lines, &data);
+        let new_lines = fill_data(&lines, &data).unwrap();
 
         assert_eq!(new_lines[0], "10000 is a large number.");
         assert_eq!(new_lines[1], "10,000 looks better.");
@@ -622,5 +872,71 @@ mod tests {
             "Data are 12,345 years old with a mean of 1.4858"
         );
         assert_eq!(new_lines[3], "-123,456,789$\\pm$12,456");
+    }
+
+    #[test]
+    fn test_expressions() {
+        let lines: Vec<String> = vec![
+            "The percentage of {{small}} out of {{large}} is {{round percentage}}".into(),
+            "Adding one percentage point, it becomes: {{round added_percentage}}".into(),
+        ];
+
+        let data = serde_json::json!({
+            "large": 10000,
+            "small": 200,
+            "percentage": "expr: 100 * small / large",
+            "added_percentage": "expr: percentage + 1",
+            "three": "expr: 1 + 2",
+            "nested_expressions": {
+                "value_sum": "expr: large + small",
+            }
+        });
+
+        assert_eq!(run_eval(&"100 * 3", &data), Ok(serde_json::json!(300)));
+        assert_eq!(
+            run_eval("round(1.23, 1)", &data),
+            Ok(serde_json::json!(1.2))
+        );
+        assert_eq!(run_eval("round(1.23)", &data), Ok(serde_json::json!(1)));
+        // Check that the second argument has an integer-check
+        match run_eval("round(1.23, 1.2)", &data) {
+            Ok(v) => panic!("This should have failed!: {:?}", v),
+            Err(e) => assert!(e.contains("must be an integer")),
+        }
+
+        // This will fail because of a misspelled key.
+        match run_eval(&"largee + small", &data) {
+            Ok(v) => panic!("This should have failed!: {:?}", v),
+            Err(e) => assert!(e.contains("Perhaps a key is misspelled?")),
+        };
+
+        println!("{:?}", find_expressions(&data, None));
+
+        let parsed_data = evaluate_all_expressions(&data).unwrap();
+        let new_lines = fill_data(&lines, &parsed_data).unwrap();
+
+        assert_eq!(parsed_data["three"], serde_json::json!(3));
+        assert_eq!(parsed_data["percentage"], serde_json::json!(2.0));
+        assert_eq!(
+            parsed_data["nested_expressions"]["value_sum"],
+            serde_json::json!(10200)
+        );
+
+        assert_eq!(new_lines[0], "The percentage of 200 out of 10000 is 2");
+        assert_eq!(new_lines[1], "Adding one percentage point, it becomes: 3");
+
+        // Make some expressions with circular dependencies (should raise a recursion error).
+        let data = serde_json::json!({
+            "ex1": "expr: ex2 + 1",
+            "ex2": "expr: ex1 + 1",
+            "ex3": "expr: ex3 + 1"
+        });
+
+        assert!(data.is_object());
+
+        match evaluate_expression("ex1 + ex2", &data, 0) {
+            Ok(v) => panic!("This should have failed!: {:?}", v),
+            Err(s) => assert!(s.contains("recursion"), "{}", s),
+        };
     }
 }

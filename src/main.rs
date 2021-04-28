@@ -137,7 +137,7 @@ fn parse_cli_args() -> Result<String, String> {
                 Err(e) => return Err(e.to_string()),
             };
 
-            lines = templates::fill_data(&lines, &data);
+            lines = templates::fill_data(&lines, &data)?;
         };
 
         let keep_intermediates = matches.is_present("KEEP_INTERMEDIATES");
@@ -191,7 +191,7 @@ fn parse_cli_args() -> Result<String, String> {
                 Err(e) => return Err(e.to_string()),
             };
 
-            lines = templates::fill_data(&lines, &data);
+            lines = templates::fill_data(&lines, &data)?;
         };
 
         // Return the text to write to stdout.
