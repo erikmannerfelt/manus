@@ -601,8 +601,12 @@ fn run_eval(expr_string: &str, data: &Json) -> Result<Json, String> {
         };
         // Parse the second argument as the decimal.
         let decimals = match args.get(1) {
+            // If it's a number, parse it as f64
             Some(Json::Number(x)) => x.as_f64().unwrap(),
-            _ => return Err(eval::Error::ExpectedNumber),
+            // If it's anything else than a number, return an error
+            Some(_) => return Err(eval::Error::ExpectedNumber),
+            // If the argument was not given, default to 0
+            None => 0.0,
         };
 
         // Return an error if the decimal number is not equivalent to an integer.
@@ -615,7 +619,12 @@ fn run_eval(expr_string: &str, data: &Json) -> Result<Json, String> {
 
         // Round the number and return it appropriately.
         let rounded = round_value(value, decimals as i32);
-        Ok(serde_json::json!(rounded))
+
+        // If the value is equivalent of an integer, return an integer form of it.
+        match rounded.round() == rounded {
+            true => Ok(serde_json::json!(rounded as i64)),
+            false => Ok(serde_json::json!(rounded)),
+        }
     });
 
     // Fill the expression with variables from the data.
@@ -888,14 +897,17 @@ mod tests {
             run_eval("round(1.23, 1)", &data),
             Ok(serde_json::json!(1.2))
         );
+        assert_eq!(run_eval("round(1.23)", &data), Ok(serde_json::json!(1)));
         // Check that the second argument has an integer-check
-        if let Err(e) = run_eval("round(1.23, 1.2)", &data) {
-            assert!(e.contains("must be an integer"));
-        };
+        match run_eval("round(1.23, 1.2)", &data) {
+            Ok(v) => panic!("This should have failed!: {:?}", v),
+            Err(e) => assert!(e.contains("must be an integer")),
+        }
 
         // This will fail because of a misspelled key.
-        if let Err(e) = run_eval(&"largee + small", &data) {
-            assert!(e.contains("Perhaps a key is misspelled?"));
+        match run_eval(&"largee + small", &data) {
+            Ok(v) => panic!("This should have failed!: {:?}", v),
+            Err(e) => assert!(e.contains("Perhaps a key is misspelled?")),
         };
 
         println!("{:?}", find_expressions(&data, None));
@@ -905,6 +917,10 @@ mod tests {
 
         assert_eq!(parsed_data["three"], serde_json::json!(3));
         assert_eq!(parsed_data["percentage"], serde_json::json!(2.0));
+        assert_eq!(
+            parsed_data["nested_expressions"]["value_sum"],
+            serde_json::json!(10200)
+        );
 
         assert_eq!(new_lines[0], "The percentage of 200 out of 10000 is 2");
         assert_eq!(new_lines[1], "Adding one percentage point, it becomes: 3");
