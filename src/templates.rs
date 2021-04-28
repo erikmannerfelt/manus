@@ -592,6 +592,32 @@ fn run_eval(expr_string: &str, data: &Json) -> Result<Json, String> {
     // Create an expression object from the string.
     let mut expr = eval::Expr::new(expr_string);
 
+    // All this is to implement the round function. Oboy!
+    expr = expr.function("round", |args: Vec<Json>| {
+        // Parse the first argument as the value to round.
+        let value = match args.get(0) {
+            Some(Json::Number(x)) => x.as_f64().unwrap(),
+            _ => return Err(eval::Error::ExpectedNumber),
+        };
+        // Parse the second argument as the decimal.
+        let decimals = match args.get(1) {
+            Some(Json::Number(x)) => x.as_f64().unwrap(),
+            _ => return Err(eval::Error::ExpectedNumber),
+        };
+
+        // Return an error if the decimal number is not equivalent to an integer.
+        if decimals.round() != decimals {
+            return Err(eval::Error::Custom(format!(
+                "Second rounding argument must be an integer. Given value: {}",
+                decimals
+            )));
+        };
+
+        // Round the number and return it appropriately.
+        let rounded = round_value(value, decimals as i32);
+        Ok(serde_json::json!(rounded))
+    });
+
     // Fill the expression with variables from the data.
     // TODO: Look into if the "json has to be object" check may have side-effects.
     if let Json::Object(obj) = data {
@@ -858,16 +884,23 @@ mod tests {
         });
 
         assert_eq!(run_eval(&"100 * 3", &data), Ok(serde_json::json!(300)));
+        assert_eq!(
+            run_eval("round(1.23, 1)", &data),
+            Ok(serde_json::json!(1.2))
+        );
+        // Check that the second argument has an integer-check
+        if let Err(e) = run_eval("round(1.23, 1.2)", &data) {
+            assert!(e.contains("must be an integer"));
+        };
 
         // This will fail because of a misspelled key.
         if let Err(e) = run_eval(&"largee + small", &data) {
             assert!(e.contains("Perhaps a key is misspelled?"));
-        }
+        };
 
         println!("{:?}", find_expressions(&data, None));
 
         let parsed_data = evaluate_all_expressions(&data).unwrap();
-
         let new_lines = fill_data(&lines, &parsed_data).unwrap();
 
         assert_eq!(parsed_data["three"], serde_json::json!(3));
