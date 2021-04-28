@@ -610,7 +610,7 @@ fn run_eval(expr_string: &str, data: &Json) -> Result<Json, String> {
         };
 
         // Return an error if the decimal number is not equivalent to an integer.
-        if decimals.round() != decimals {
+        if decimals.fract() > 0.0 {
             return Err(eval::Error::Custom(format!(
                 "Second rounding argument must be an integer. Given value: {}",
                 decimals
@@ -621,7 +621,7 @@ fn run_eval(expr_string: &str, data: &Json) -> Result<Json, String> {
         let rounded = round_value(value, decimals as i32);
 
         // If the value is equivalent of an integer, return an integer form of it.
-        match rounded.round() == rounded {
+        match rounded.fract() == 0.0 {
             true => Ok(serde_json::json!(rounded as i64)),
             false => Ok(serde_json::json!(rounded)),
         }
