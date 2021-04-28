@@ -965,6 +965,7 @@ dependencies = [
  "serde_json",
  "tectonic",
  "tempfile",
+ "toml",
 ]
 
 [[package]]
