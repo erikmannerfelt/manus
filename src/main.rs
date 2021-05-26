@@ -77,17 +77,17 @@
 //! Arguments:
 //! * `decimal`: Optional. The decimal to round both values to.
 //! * `key`: The key to print and find a corresponding `_pm` key for.
-//! 
+//!
 //! As you saw in the example above, the `n_measurements` key could be fetched from the data file
 //! by simply writing `{{n_measurements}}` in the `TeX` file.
 //! The `resultant_value` has an associated error (could have been called `resultant_error`),
 //! whereby we would write `{{resultant_value}}$\pm${{resultant_error}}`.
-//! This is quite repetitive, however, so a helper `pm` exists to simplify this. 
-//! 
+//! This is quite repetitive, however, so a helper `pm` exists to simplify this.
+//!
 //! If `{{pm anykey}}` is written, the helper will look for an associated error key: `anykey_pm`.
 //! In the case above, this would be `resultant_value_pm`.
 //!
-//! 
+//!
 //! If we want to round both the value and its error, the `decimal` optional argument can be used:
 //!
 //! ```tex
@@ -179,7 +179,7 @@
 //! ```tex
 //! 100000000
 //! ```
-//! 
+//!
 //! #### Chaining helpers
 //!
 //! Helpers can be chained using parantheses:
@@ -251,7 +251,7 @@
 //! ```
 //!
 //! #### E --- Power of ten
-//! 
+//!
 //! `E(x)` is the same as `pow(10, x)`, but a bit shorter:
 //!
 //! ```text
@@ -260,7 +260,7 @@
 //! renders to:
 //! ```text
 //! 300
-//! ``` 
+//! ```
 //!
 //!
 //! ## Conversions
