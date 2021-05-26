@@ -1,5 +1,9 @@
 //! A **manus**cript helper to simplify writing good papers.
 //!
+//! This is an early work in progress.
+//! All improvement suggestions are welcome [on
+//! GitHub](https://github.com/erikmannerfelt/manus/issues)!
+//!
 //! ## Simple CLI usage
 //!
 //! ```bash
@@ -147,7 +151,47 @@
 //! 85\,819
 //! ```
 //! which looks approximately like '85 819' when rendered into the PDF.
+//!
+//! #### upper/lower --- Convert to upper-/lowercase
+//! Arguments:
+//! * `string`: A string to modify
+//!
+//! With the key-value pair: `abbreviation = "aBc"` in the `data.toml`:
+//! ```tex
+//! {{lower abbreviation}}
+//! {{upper abbreviation}}
+//! ```
+//! renders to:
+//! ```tex
+//! abc
+//! ABC
+//! ```
+//!
+//! #### pow --- X to the power of Y
+//! Arguments:
+//! * `value`: The value to raise.
+//! * `exponent`: The exponent to raise a value to
+//!
+//! ```tex
+//! {{pow 10 8}}
+//! ```
+//! renders to:
+//! ```tex
+//! 100000000
+//! ```
 //! 
+//! #### Chaining helpers
+//!
+//! Helpers can be chained using parantheses:
+//!
+//! ```tex
+//! {{sep (pow 10 8)}}
+//! ```
+//! renders to:
+//!
+//! ```tex
+//! 100\,000\,000
+//! ```
 //!
 //! ## Expressions
 //! The "in-`TeX`" helpers are great for small one-time formatting, but expressions in `manus` take
@@ -179,7 +223,44 @@
 //! #### round
 //! Arguments:
 //! * `value`: The value to round.
-//! * `decimal`
+//! * `decimal`: Optional. The number of decimals to round to. Defaults to 0.
+//!
+//! with the `data.toml`:
+//! ```toml
+//! exact_value = 1883.8090928305920395
+//! rounded_value = "expr: round(exact_value, 2)"
+//! integer_value = "expr: round(exact_value)"
+//! ```
+//! becomes this in the rendering stage:
+//! ```toml
+//! exact_value = 1883.8090928305920395
+//! rounded_value = 1883.81
+//! integer_value = 1884
+//! ```
+//!
+//! #### pow --- Raise X to Y
+//! * `value`: The value to raise to an exponent.
+//! * `exponent`: The exponent to raise the value to.
+//!
+//! ```text
+//! "expr: pow(5, 2)"
+//! ```
+//! renders to:
+//! ```text
+//! 25
+//! ```
+//!
+//! #### E --- Power of ten
+//! 
+//! `E(x)` is the same as `pow(10, x)`, but a bit shorter:
+//!
+//! ```text
+//! "expr: 3 * E(2)"
+//! ```
+//! renders to:
+//! ```text
+//! 300
+//! ``` 
 //!
 //!
 //! ## Conversions
