@@ -290,7 +290,7 @@ fn round_helper(
     out: &mut dyn handlebars::Output,
 ) -> handlebars::HelperResult {
     // Establish the decimals and value arguments which will soon be assigned.
-    let decimals: i32;
+    let decimals: i64;
     let value: f64;
 
     // If the helper has an argument of index 1, it is assumed to have two arguments.
@@ -387,6 +387,53 @@ fn roundup_helper(
     Ok(())
 }
 
+/// Raise a value to an exponent.
+///
+/// Requires two arguments: 'value', and 'power'
+fn exponent_helper(
+    h: &handlebars::Helper,
+    _: &handlebars::Handlebars,
+    _: &handlebars::Context,
+    _: &mut handlebars::RenderContext,
+    out: &mut dyn handlebars::Output,
+) -> handlebars::HelperResult {
+    let value = match h.param(0) {
+        Some(p) => match json_as_float(p.value()) {
+            Ok(x) => x,
+            Err(e) => return Err(handlebars::RenderError::new::<String>(e)),
+        },
+        None => {
+            return Err(handlebars::RenderError::new::<String>(
+                "No arguments provided.".into(),
+            ))
+        }
+    };
+
+    let exponent = match h.param(1) {
+        Some(p) => match json_as_float(p.value()) {
+            Ok(x) => x,
+            Err(e) => return Err(handlebars::RenderError::new::<String>(e)),
+        },
+        None => {
+            return Err(handlebars::RenderError::new::<String>(
+                "No arguments provided.".into(),
+            ))
+        }
+    };
+
+    let product = match exponent >= 0.0 {
+        true => value.powf(exponent),
+        false => 1.0 / value.powf(-exponent),
+    };
+
+    match product.fract() == 0.0 {
+        true => out.write(&format!("{}", product as i64)),
+        false => out.write(&format!("{}", product)),
+    }?;
+
+    Ok(())
+}
+
 /// Try to parse a JSON value as i32.
 ///
 ///
@@ -396,13 +443,10 @@ fn roundup_helper(
 ///
 /// assert_eq!(json_as_integer(v), 2);
 /// ```
-fn json_as_integer(value: &Json) -> Result<i32, String> {
-    let parsed: Option<i32> = match value {
-        Json::Number(n) => match n.as_i64() {
-            Some(x) => Some(x as i32),
-            None => None,
-        },
-        Json::String(s) => match s.to_string().parse::<i32>() {
+fn json_as_integer(value: &Json) -> Result<i64, String> {
+    let parsed: Option<i64> = match value {
+        Json::Number(n) => n.as_i64(),
+        Json::String(s) => match s.to_string().parse::<i64>() {
             Ok(x) => Some(x),
             Err(_) => None,
         },
@@ -463,8 +507,8 @@ fn json_as_float(value: &Json) -> Result<f64, String> {
 /// ```
 /// assert_eq!(round_value(8999.0, -3), 9000.0);
 /// ```
-fn round_value(value: f64, decimals: i32) -> f64 {
-    (value * 10_f64.powi(decimals)).round() / 10_f64.powi(decimals)
+fn round_value(value: f64, decimals: i64) -> f64 {
+    (value * 10_f64.powi(decimals as i32)).round() / 10_f64.powi(decimals as i32)
 }
 
 /// Fill a vector of text with data using templating.
@@ -480,6 +524,7 @@ pub fn fill_data(lines: &[String], data: &serde_json::Value) -> Result<Vec<Strin
     reg.register_helper("roundup", Box::new(roundup_helper));
     reg.register_helper("pm", Box::new(pm_helper));
     reg.register_helper("sep", Box::new(sep_helper));
+    reg.register_helper("pow", Box::new(exponent_helper));
     reg.set_strict_mode(true);
 
     for (i, line) in lines.iter().enumerate() {
@@ -618,12 +663,60 @@ fn run_eval(expr_string: &str, data: &Json) -> Result<Json, String> {
         };
 
         // Round the number and return it appropriately.
-        let rounded = round_value(value, decimals as i32);
+        let rounded = round_value(value, decimals as i64);
 
         // If the value is equivalent of an integer, return an integer form of it.
         match rounded.fract() == 0.0 {
             true => Ok(serde_json::json!(rounded as i64)),
             false => Ok(serde_json::json!(rounded)),
+        }
+    });
+
+    // Function to raise a value to the power of an exponent.
+    expr = expr.function("pow", |args: Vec<Json>| {
+        let value = match args.get(0) {
+            Some(Json::Number(x)) => x.as_f64().unwrap(),
+            _ => return Err(eval::Error::ExpectedNumber),
+        };
+
+        let exponent = match args.get(1) {
+            Some(Json::Number(x)) => x.as_f64().unwrap(),
+            _ => return Err(eval::Error::ExpectedNumber),
+        };
+
+        let product = match exponent >= 0.0 {
+            true => value.powf(exponent),
+            false => 1.0 / value.powf(-exponent),
+        };
+
+        match product.fract() == 0.0 {
+            true => Ok(serde_json::json!(product as i64)),
+            false => Ok(serde_json::json!(product)),
+        }
+    });
+
+    // Function to expand powers of ten
+    expr = expr.function("E", |args: Vec<Json>| {
+        if args.len() != 1 {
+            return Err(eval::Error::ArgumentsGreater(1));
+        };
+
+        let exponent = match args.get(0) {
+            Some(x) => match json_as_float(x) {
+                Ok(v) => v,
+                Err(e) => return Err(eval::Error::Custom(e)),
+            },
+            _ => return Err(eval::Error::ExpectedNumber),
+        };
+
+        let product = match exponent >= 0.0 {
+            true => 10_f64.powf(exponent),
+            false => 1.0 / 10_f64.powf(-exponent),
+        };
+
+        match product.fract() == 0.0 {
+            true => Ok(serde_json::json!(product as i64)),
+            false => Ok(serde_json::json!(product)),
         }
     });
 
@@ -879,6 +972,7 @@ mod tests {
         let lines: Vec<String> = vec![
             "The percentage of {{small}} out of {{large}} is {{round percentage}}".into(),
             "Adding one percentage point, it becomes: {{round added_percentage}}".into(),
+            "Ten to the power of three is {{powup}}, and ten to the power of minus two is {{powdown}}".into()
         ];
 
         let data = serde_json::json!({
@@ -886,6 +980,8 @@ mod tests {
             "small": 200,
             "percentage": "expr: 100 * small / large",
             "added_percentage": "expr: percentage + 1",
+            "powup": "expr: pow(10, 3)",
+            "powdown": "expr: pow(10, -2.0)",
             "three": "expr: 1 + 2",
             "nested_expressions": {
                 "value_sum": "expr: large + small",
@@ -903,6 +999,16 @@ mod tests {
             Ok(v) => panic!("This should have failed!: {:?}", v),
             Err(e) => assert!(e.contains("must be an integer")),
         }
+
+        assert_eq!(run_eval("E(3)", &data), Ok(serde_json::json!(1000)));
+        assert_eq!(run_eval("E(0-1)", &data), Ok(serde_json::json!(0.1)));
+        assert_eq!(run_eval("3 * E(0-2)", &data), Ok(serde_json::json!(0.03)));
+        assert_eq!(run_eval("pow(10, 3)", &data), Ok(serde_json::json!(1000)));
+        assert_eq!(run_eval("pow(10, 0-1)", &data), Ok(serde_json::json!(0.1)));
+        assert_eq!(
+            run_eval("pow(92809.984, 0)", &data),
+            Ok(serde_json::json!(1))
+        );
 
         // This will fail because of a misspelled key.
         match run_eval(&"largee + small", &data) {
