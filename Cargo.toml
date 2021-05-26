@@ -1,12 +1,13 @@
 [package]
 name = "manus"
-version = "0.1.1"
+version = "0.1.1-2"
 authors = ["Erik Mannerfelt <erik-holmlund@hotmail.com>"]
 edition = "2018"
 description = "A manuscript helper to simplify writing good papers."
-license-file = "LICENSE"
+license = "MIT"
 homepage = "https://crates.io/crates/manus"
 repository = "https://github.com/erikmannerfelt/manus"
+readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
