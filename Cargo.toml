@@ -4,7 +4,6 @@ version = "0.1.0"
 authors = ["Erik Mannerfelt <erik-holmlund@hotmail.com>"]
 edition = "2018"
 description = "A manuscript helper to simplify writing good papers."
-license = "MIT"
 license-file = "LICENSE"
 homepage = "https://github.com/erikmannerfelt/manus"
 repository = "https://github.com/erikmannerfelt/manus"
@@ -12,18 +11,18 @@ repository = "https://github.com/erikmannerfelt/manus"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tectonic = "0.4.1"
-handlebars = "*"
-serde_json = "*"
-toml = "*"
-eval = "*"
+tectonic = "0.4.*"
+handlebars = "3.5.*"
+serde_json = "1.0.*"
+toml = "0.5.*"
+eval = "0.4.*"
 
 [dependencies.clap]
 version = "3.0.0-beta.2"
 features = ["suggestions", "color"]
 
 [dev-dependencies]
-assert_approx_eq = "*"
+assert_approx_eq = "1.1.*"
 assert_cmd = "0.10"
 predicates = "1"
-tempfile = "*"
+tempfile = "3.2.*"
